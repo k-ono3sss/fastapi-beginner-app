@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>タスク管理（簡易版）</title>
+</head>
+<body>
+  <h1>タスク一覧</h1>
+  <ul id="tasks"></ul>
+
+  <h2>タスク追加</h2>
+  <form id="taskForm">
+    <input name="title" placeholder="タイトル" required>
+    <input name="description" placeholder="詳細">
+    <input name="deadline" type="date">
+    <label><input name="completed" type="checkbox"> 完了</label>
+    <button type="submit">追加</button>
+  </form>
+
+  <script>
+    // 一覧を取得して表示
+    async function loadTasks() {
+      const res = await fetch('/tasks');
+      const tasks = await res.json();
+      const ul = document.getElementById('tasks');
+      ul.innerHTML = '';
+      tasks.forEach(t => {
+        const li = document.createElement('li');
+        li.dataset.id = t.id;
+
+        // title 表示領域
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = t.title;
+        titleSpan.className = 'title';
+        li.appendChild(titleSpan);
+
+        // completed 表示領域
+        const statusSpan = document.createElement('span');
+        statusSpan.textContent = t.completed ? ' (完了)' : ' (未完了)';
+        statusSpan.className = 'status';
+        li.appendChild(statusSpan);
+
+        // 編集ボタン
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '編集';
+        editBtn.className = 'edit';
+        li.appendChild(editBtn);
+
+        // 削除ボタン
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '削除';
+        delBtn.className = 'delete';
+        li.appendChild(delBtn);
+
+        ul.appendChild(li);
+      });
+    }
+
+    // 追加フォーム送信
+    document.getElementById('taskForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const f = e.target;
+      const data = {
+        title: f.title.value,
+        description: f.description.value,
+        deadline: f.deadline.value || null,
+        completed: f.completed.checked
+      };
+      await fetch('/tasks', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(data)
+      });
+      f.reset();
+      loadTasks();
+    });
+
+    // 編集・削除・保存を一括ハンドル
+    document.getElementById('tasks').addEventListener('click', async e => {
+      const li = e.target.closest('li');
+      const id = li.dataset.id;
+
+      // 削除
+      if (e.target.classList.contains('delete')) {
+        await fetch(`/tasks/${id}`, { method:'DELETE' });
+        loadTasks();
+      }
+
+      // 編集開始
+      if (e.target.classList.contains('edit')) {
+        // 既存テキストを保存
+        const title = li.querySelector('.title').textContent;
+        const completed = li.querySelector('.status').textContent.includes('完了');
+
+        // UI を入力欄に置き換え
+        li.innerHTML = `
+          <input class="inp-title" value="${title}">
+          <label>
+            <input type="checkbox" class="inp-completed" ${completed ? 'checked' : ''}>
+            完了
+          </label>
+          <button class="save">保存</button>
+          <button class="cancel">キャンセル</button>
+        `;
+      }
+
+      // 編集キャンセル
+      if (e.target.classList.contains('cancel')) {
+        loadTasks();
+      }
+
+      // 保存（PUT）
+      if (e.target.classList.contains('save')) {
+        const newTitle = li.querySelector('.inp-title').value;
+        const newCompleted = li.querySelector('.inp-completed').checked;
+
+        // 既存の他フィールド（description, deadline）は一旦そのまま取得
+        const res = await fetch(`/tasks/${id}`);
+        const task = await res.json();
+
+        const updated = {
+          title: newTitle,
+          description: task.description,
+          deadline: task.deadline,
+          completed: newCompleted
+        };
+        await fetch(`/tasks/${id}`, {
+          method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(updated)
+        });
+        loadTasks();
+      }
+    });
+
+    // 初回ロード
+    window.addEventListener('load', loadTasks);
+  </script>
+</body>
+</html>
